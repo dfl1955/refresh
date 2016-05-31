@@ -1,0 +1,133 @@
+#!/bin/bash
+
+# This program runs a macports selfupdate and upgrade outdated. It captures
+# its output in logs using the log_functions file and reports its stages to 
+# the screen using applescript. It needs to run as root.
+
+# needs a debug mode , a whoami & xcode-select --install , needs a log file query
+# an install would be good, as would an applescript rewrite
+# a display commands would be good, a verbose error would be good
+
+
+# v1.3 functions and uninstall inactive & clean
+# v1.2 implements logrotate
+
+PNAME="Refresh Macports"
+VER=1.4
+
+# . $HOME/bin/log_functions
+
+HELP="refresh [ -help | -lastrun | -tidyup | -xcode <install> | -approve <licence> ]"
+
+case $1 in
+-h|help) echo $HELP;  exit 0 ; ;;
+esac
+	
+AUTH=$(whoami)
+LDATE=$(stat /opt/local/var/log/refresh/outdated | cut -f6 -d'"')
+DAYSOLD=$(/Users/dave/bin/tdiff.py file=/opt/local/var/log/refresh/outdated)
+
+if ! [ ${AUTH} = "root" ]
+then
+	echo not running as root ... ends
+	exit
+fi
+
+LOG_DIR=/opt/local/var/log/refresh
+
+updatemacports()
+{
+	osascript -e 'display notification "Refresh Macports started" with title "Refresh Macports"'
+
+	LOG_NAME=${LOG_DIR}/selfupdate
+# needs seperate conf files
+	logrotate -f -v ${LOG_DIR}/selfupdate.conf
+	port -d selfupdate | tee ${LOG_NAME}
+	
+	if [ $? -eq 0 ]; then
+		osascript -e 'display notification "Refresh Macports selfupdate ends OK" with title "Refresh Macports"'
+	else
+		osascript -e 'display notification "Refresh Macports selfupdate ends US, check the log file" with title "Refresh Macports"'
+		exit 1
+	fi
+	sleep 2
+}
+
+refreshports()
+{
+	osascript -e 'display notification "Refresh Macports updating packages started" with title "Refresh Macports"'
+	LOG_NAME=${LOG_DIR}/outdated
+	logrotate -f -v ${LOG_DIR}/outdated.conf
+	port upgrade outdated | tee ${LOG_NAME}
+	if [ $? -eq 0 ]; then
+		osascript -e 'display notification "Refresh Macports package update ends OK" with title "Refresh Macports"'
+	else
+		osascript -e 'display notification "Refresh Macports package update ends US, check the log file" with title "Refresh Macports"'
+		exit 1
+	fi
+	exit 0
+}
+
+# the following code tidies up the distfiles; there may be a switch on the upgrade command
+
+tidyports()
+{
+	osascript -e 'display notification "Refresh Macports tidy up of packages started" with title "Refresh Macports"'
+	LOG_NAME=${LOG_DIR}/tidyinstall
+	# needs seperate conf files
+	logrotate -f -v ${LOG_DIR}/tidyinstall.conf
+	
+	# port uninstall inactive, tidies up the old dist files
+	port uninstall inactive | tee ${LOG_NAME}
+	if [ $? -eq 0 ]; then
+		osascript -e 'display notification "Refresh Macports package tidyup, remove inactive ends OK" with title "Refresh Macports"'
+	else
+		osascript -e 'display notification "Refresh Macports package tidyup, remove inactive ends US, check the log file" with title "Refresh Macports"'
+		exit 1
+	fi
+	LOG_NAME=${LOG_DIR}/tidyclean
+	logrotate -f -v ${LOG_DIR}/tidyclean.conf
+	port clean --all all | tee ${LOGNAME}
+	if [ $? -eq 0 ]; then
+		osascript -e 'display notification "Refresh Macports package tidyup, clean ends OK" with title "Refresh Macports"'
+	else
+		osascript -e 'display notification "Refresh Macports package tidyup, clean ends US, check the log file" with title "Refresh Macports"'
+		exit 1
+	fi
+	exit 0
+}
+
+while getopts ":h:l:t:x:a" arg ;do
+case $arg in
+h|help)	echo $HELP 
+	exit 
+	;;
+t|tidyup) :
+	set -x
+	tidyports
+	exit
+	;;
+l|lastrun) :
+	echo Last Run date is $LDATE
+	echo Today\'s date is $(date)
+	echo This is $DAYSOLD days old
+	exit
+	;;
+x|xcode) xcode-select --install
+	exit
+	;;
+a|approve) xcodebuild -license
+	exit
+	;;
+*)	echo error in parameter line
+	exit -1
+	;;
+esac
+done
+
+
+updatemacports
+sleep 2
+refreshports
+sleep 2
+exit 
