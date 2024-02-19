@@ -1,6 +1,6 @@
-refresh - a macports manager
+<h1>refresh - a macports manager</h1>
 
-#[Deprecated]
+<h1>DEPRECATED</h1>
 
 This program runs a macports selfupdate and upgrade outdated and uninstall inactive. 
 It captures its output in logs using the tee and log files managed by logrotate
